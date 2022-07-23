@@ -1,9 +1,15 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"syblog/config"
 	"syblog/logger"
 	"syblog/render"
@@ -12,17 +18,18 @@ import (
 	"github.com/88250/lute"
 	"github.com/88250/lute/parse"
 	"github.com/88250/lute/util"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/pkg/errors"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 )
 
 var publishMap = make(map[string]struct{})
 
 func main() {
 	logger.Info("读取配置")
-	logger.Infof("思源笔记API地址：%s", config.GetConfig().SiYuanAPI)
-	logger.Infof("工作空间路径：%s", config.GetConfig().WorkspacePath)
-	logger.Infof("生成到Hugo的路径：%s", config.GetConfig().HugoGenPath)
+	logger.Infof("思源笔记API地址：%s", config.GetConfig().SY.APIURL)
+	logger.Infof("工作空间路径：%s", config.GetConfig().SY.WorkspacePath)
 	logger.Info("获取需要发布的文章列表")
 	articles := service.FindArticleList()
 	logger.Infof("需要发布的文章数（直接）：%d", articles.Len())
@@ -48,10 +55,124 @@ func main() {
 	logger.Infof("总共发布的文章数：%d", articles.Len())
 
 	logger.Info("执行Hugo生成站点")
+	cmd := exec.Command(config.GetConfig().Hugo.ExcutePath)
+	cmd.Dir = config.GetConfig().Hugo.BlogPath
+	cmd.Stdout = os.Stdout
+	err := cmd.Run()
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+
+	if config.GetConfig().SSH.Addr == "" {
+		return
+	}
 	logger.Info("打包压缩站点")
+	tempFilePath := packageSite()
+	defer os.RemoveAll(filepath.Join(tempFilePath, "../"))
+
 	logger.Info("连接服务器SFTP")
+	var conf *ssh.ClientConfig
+	if config.GetConfig().SSH.Password != "" {
+		conf = &ssh.ClientConfig{
+			User: "ubuntu",
+			Auth: []ssh.AuthMethod{
+				ssh.Password(config.GetConfig().SSH.Password),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+	} else if config.GetConfig().SSH.KeyPath != "" {
+		key, err := ioutil.ReadFile(config.GetConfig().SSH.KeyPath)
+		if err != nil {
+			logger.Fatalf("%+v", errors.WithStack(err))
+		}
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			logger.Fatalf("%+v", errors.WithStack(err))
+		}
+		conf = &ssh.ClientConfig{
+			User: "ubuntu",
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(signer),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		}
+	} else {
+		logger.Fatal("SSH的密码或私钥文件路径未配置")
+	}
+
+	client, err := ssh.Dial("tcp", config.GetConfig().SSH.Addr, conf)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	defer sftpClient.Close()
 	logger.Info("上传站点压缩包")
+	target, err := sftpClient.OpenFile("/tmp/site.tar.gz", os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	defer target.Close()
+	src, err := os.Open(tempFilePath)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	defer src.Close()
+	_, err = io.Copy(target, src)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+
 	logger.Info("解压至指定路径")
+	session, err := client.NewSession()
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	defer session.Close()
+
+	rmPath := config.GetConfig().SSH.SitePath
+	rmPath = strings.TrimSuffix(rmPath, "/")
+	rmPath = rmPath + "/*"
+	err = session.Run(fmt.Sprintf("rm -rf %s && tar -zxf /tmp/site.tar.gz -C %s", rmPath, config.GetConfig().SSH.SitePath))
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	logger.Info("执行完成")
+}
+
+func packageSite() string {
+	tempDir, err := ioutil.TempDir("", "sitezip-*")
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	tempFile, err := ioutil.TempFile(tempDir, "*.tar.gz")
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	defer tempFile.Close()
+	gw := gzip.NewWriter(tempFile)
+	defer gw.Close()
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+	publicPath := filepath.Join(config.GetConfig().Hugo.BlogPath, "public")
+	fis, err := ioutil.ReadDir(publicPath)
+	if err != nil {
+		logger.Fatalf("%+v", errors.WithStack(err))
+	}
+	for _, fi := range fis {
+		p := filepath.Join(publicPath, fi.Name())
+		f, err := os.Open(p)
+		if err != nil {
+			logger.Fatalf("%+v", errors.WithStack(err))
+		}
+		err = compress(f, "", tw)
+		if err != nil {
+			logger.Fatalf("%+v", errors.WithStack(err))
+		}
+	}
+	return tempFile.Name()
 }
 
 func exportArticle(article *service.Article) {
@@ -59,7 +180,7 @@ func exportArticle(article *service.Article) {
 	if err != nil {
 		logger.Fatalf("%+v", errors.Wrap(err, ""))
 	}
-	articleDirPath := filepath.Join(config.GetConfig().HugoGenPath, article.Title)
+	articleDirPath := filepath.Join(config.GetConfig().Hugo.BlogPath, "content", config.GetConfig().Hugo.SectionName, article.Title)
 	if _, err := os.Stat(articleDirPath); err != nil {
 		os.MkdirAll(articleDirPath, 0555)
 	}
@@ -79,7 +200,7 @@ func exportArticle(article *service.Article) {
 	assertDirPath := filepath.Join(articleDirPath, "assets")
 	isFirst := true
 	for _, a := range article.Asserts {
-		p := filepath.Join(config.GetConfig().AssetsPath, a)
+		p := filepath.Join(config.GetConfig().SY.AssetsPath, a)
 		if _, err := os.Stat(p); err != nil {
 			continue
 		}
@@ -106,4 +227,46 @@ func exportArticle(article *service.Article) {
 
 		io.Copy(dst, src)
 	}
+}
+
+func compress(file *os.File, prefix string, tw *tar.Writer) error {
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		prefix = prefix + "/" + info.Name()
+		fileInfos, err := file.Readdir(-1)
+		if err != nil {
+			return err
+		}
+		for _, fi := range fileInfos {
+			f, err := os.Open(file.Name() + "/" + fi.Name())
+			if err != nil {
+				return err
+			}
+			err = compress(f, prefix, tw)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		header, err := tar.FileInfoHeader(info, "")
+		header.Name = prefix + "/" + header.Name
+		header.Name = strings.TrimPrefix(header.Name, "/")
+		logger.Infof("正在压缩：%s", header.Name)
+		if err != nil {
+			return err
+		}
+		err = tw.WriteHeader(header)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(tw, file)
+		file.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

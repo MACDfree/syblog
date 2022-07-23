@@ -1,0 +1,15 @@
+[siyuan]
+apiURL = ""
+workspacePath = ""
+
+[hugo]
+excutePath = ""
+blogPath = ""
+sectionName = "" # default notes
+
+[ssh]
+addr = ""
+user = ""
+password = ""
+keyPath = ""
+sitePath = ""
