@@ -48,11 +48,15 @@ func FindArticleList() *list.List {
 			logger.Fatalf("%+v", errors.WithStack(err))
 		}
 		tagStr := doc["tag"].(string)
-		tags := strings.Split(tagStr, " ")
-		for i := 0; i < len(tags); i++ {
-			tags[i] = strings.Trim(tags[i], "#")
+		if tagStr == "" {
+			article.Tags = []string{}
+		} else {
+			tags := strings.Split(tagStr, " ")
+			for i := 0; i < len(tags); i++ {
+				tags[i] = strings.Trim(tags[i], "#")
+			}
+			article.Tags = tags
 		}
-		article.Tags = tags
 		as.PushBack(article)
 	}
 	return as
