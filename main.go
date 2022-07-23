@@ -14,6 +14,7 @@ import (
 	"syblog/logger"
 	"syblog/render"
 	"syblog/service"
+	"time"
 
 	"github.com/88250/lute"
 	"github.com/88250/lute/parse"
@@ -43,7 +44,9 @@ func main() {
 			continue
 		}
 		luteEngine := lute.New()
-		tree := parse.Parse("demo", []byte(md), luteEngine.ParseOptions)
+		tree := parse.Parse("", []byte(md), luteEngine.ParseOptions)
+		luteEngine.RenderOptions.AutoSpace = true
+		luteEngine.RenderOptions.FixTermTypo = true
 		renderer := render.NewFormatRenderer(tree, luteEngine.RenderOptions, article, articles, publishMap)
 		formattedBytes := renderer.Render()
 		md = util.BytesToStr(formattedBytes)
@@ -176,7 +179,17 @@ func packageSite() string {
 }
 
 func exportArticle(article *service.Article) {
-	frontMatter, err := toml.Marshal(article)
+	frontMatter, err := toml.Marshal(&struct {
+		Title   string             `toml:"title"`
+		Created toml.LocalDateTime `toml:"date"`
+		Updated toml.LocalDateTime `toml:"lastmod"`
+		Tags    []string           `toml:"tags"`
+	}{
+		Title:   article.Title,
+		Created: tomlLocalDateTime(article.Created),
+		Updated: tomlLocalDateTime(article.Updated),
+		Tags:    article.Tags,
+	})
 	if err != nil {
 		logger.Fatalf("%+v", errors.Wrap(err, ""))
 	}
@@ -269,4 +282,19 @@ func compress(file *os.File, prefix string, tw *tar.Writer) error {
 		}
 	}
 	return nil
+}
+
+func tomlLocalDateTime(t time.Time) toml.LocalDateTime {
+	return toml.LocalDateTime{
+		LocalDate: toml.LocalDate{
+			Year:  t.Year(),
+			Month: int(t.Month()),
+			Day:   t.Day(),
+		},
+		LocalTime: toml.LocalTime{
+			Hour:   t.Hour(),
+			Minute: t.Minute(),
+			Second: t.Second(),
+		},
+	}
 }
