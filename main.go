@@ -19,6 +19,7 @@ import (
 	"github.com/88250/lute"
 	"github.com/88250/lute/parse"
 	"github.com/88250/lute/util"
+	"github.com/dustin/go-humanize"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
@@ -123,6 +124,8 @@ func main() {
 		logger.Fatalf("%+v", errors.WithStack(err))
 	}
 	defer src.Close()
+	stat, _ := src.Stat()
+	logger.Infof("站点压缩包大小为：%s", humanize.Bytes(uint64(stat.Size())))
 	_, err = io.Copy(target, src)
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
