@@ -11,6 +11,7 @@ SYBlog是一个将思源笔记通过Hugo发布成博客的工具。
 ```toml
 [siyuan]
 apiURL = ""        # 思源笔记API地址，默认为：127.0.0.1:6806
+apiToken = ""      # 思源笔记API Token
 workspacePath = "" # 使用的工作空间路径，如：D:\\synote
 
 [hugo]
@@ -19,7 +20,7 @@ blogPath = ""    # 博客路径，如：D:\\code\\hugoblog
 sectionName = "" # 生成的section名字，默认为notes
 
 [ssh]
-addr = ""     # 自己的VPS服务器地址，如：231.21.21.21
+addr = ""     # 自己的VPS服务器地址，如：231.21.21.21:22
 user = ""     # 登录账号，如：root
 password = "" # 登录密码（与keyPath二选一），如：123456
 keyPath = ""  # 登录使用的私钥（与password二选一），如：D:\\privatekey\\id_rsa

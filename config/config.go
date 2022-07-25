@@ -18,6 +18,7 @@ type Config struct {
 
 type SYConfig struct {
 	APIURL        string `toml:"apiURL"`
+	APIToken      string `toml:"apiToken"`
 	WorkspacePath string `toml:"workspacePath"`
 	AssetsPath    string `toml:"-"`
 }

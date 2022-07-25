@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"strings"
+	"syblog/config"
 	"syblog/logger"
 	"time"
 
@@ -105,7 +106,7 @@ func ExportMD(id string) (string, error) {
 	}{}
 	_, err := client.R().SetBody(map[string]interface{}{
 		"id": id,
-	}).SetResult(result).Post("http://127.0.0.1:6806/api/export/exportMdContent")
+	}).SetResult(result).Post("http://" + config.GetConfig().SY.APIURL + "/api/export/exportMdContent")
 	if err != nil {
 		return "", err
 	}
@@ -121,7 +122,7 @@ func findList(sql string) ([]map[string]any, error) {
 		SetBody(map[string]interface{}{
 			"stmt": sql,
 		}).SetResult(result).
-		Post("http://127.0.0.1:6806/api/query/sql")
+		Post("http://" + config.GetConfig().SY.APIURL + "/api/query/sql")
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ type Result struct {
 
 func init() {
 	client.OnBeforeRequest(func(c *req.Client, r *req.Request) error {
-		r.SetHeader("Authorization", "Token 78u8eihczoo8eb8s")
+		r.SetHeader("Authorization", "Token "+config.GetConfig().SY.APIToken)
 		return nil
 	})
 }

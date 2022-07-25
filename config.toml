@@ -1,15 +1,16 @@
 [siyuan]
-apiURL = ""
-workspacePath = ""
+apiURL = ""        # 思源笔记API地址，默认为：127.0.0.1:6806
+apiToken = ""      # 思源笔记API Token
+workspacePath = "" # 使用的工作空间路径，如：D:\\synote
 
 [hugo]
-excutePath = ""
-blogPath = ""
-sectionName = "" # default notes
+excutePath = ""  # hugo可执行程序路径，如：D:\\software\\bin\\hugo.exe
+blogPath = ""    # 博客路径，如：D:\\code\\hugoblog
+sectionName = "" # 生成的section名字，默认为notes
 
 [ssh]
-addr = ""
-user = ""
-password = ""
-keyPath = ""
-sitePath = ""
+addr = ""     # 自己的VPS服务器地址，如：231.21.21.21:22
+user = ""     # 登录账号，如：root
+password = "" # 登录密码（与keyPath二选一），如：123456
+keyPath = ""  # 登录使用的私钥（与password二选一），如：D:\\privatekey\\id_rsa
+sitePath = "" # VPS服务器上站点路径，如：/home/user/nginx/www
