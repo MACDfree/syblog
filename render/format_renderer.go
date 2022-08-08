@@ -1038,7 +1038,8 @@ func (r *FormatRenderer) renderLink(node *ast.Node, entering bool) ast.WalkStatu
 					id := strings.TrimPrefix(link, "siyuan://blocks/")
 					a := service.FindArticleByBlockID(id)
 					if a != nil {
-						link = "../" + url.QueryEscape(strings.ToLower(a.Title)) + "/"
+						t := strings.ReplaceAll(a.Title, " ", "-")
+						link = "../" + url.QueryEscape(strings.ToLower(t)) + "/"
 						if _, ok := r.publishMap[a.ID]; !ok {
 							r.articles.PushBack(a)
 						}

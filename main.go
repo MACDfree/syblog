@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syblog/config"
 	"syblog/logger"
@@ -32,12 +33,18 @@ func main() {
 	logger.Info("读取配置")
 	logger.Infof("思源笔记API地址：%s", config.GetConfig().SY.APIURL)
 	logger.Infof("工作空间路径：%s", config.GetConfig().SY.WorkspacePath)
+	hugoContentPath := filepath.Join(config.GetConfig().Hugo.BlogPath, "content", config.GetConfig().Hugo.SectionName)
+	logger.Infof("清理Hugo目录：%s", hugoContentPath)
+	os.RemoveAll(hugoContentPath)
 	logger.Info("获取需要发布的文章列表")
 	articles := service.FindArticleList()
 	logger.Infof("需要发布的文章数（直接）：%d", articles.Len())
 	logger.Info("开始逐个发布文章")
 	for e := articles.Front(); e != nil; e = e.Next() {
 		article := e.Value.(*service.Article)
+		if _, ok := publishMap[article.ID]; ok {
+			continue
+		}
 		logger.Infof("开始发布：%s", article.Title)
 		md, err := service.ExportMD(article.ID)
 		if err != nil {
@@ -182,17 +189,20 @@ func packageSite() string {
 }
 
 func exportArticle(article *service.Article) {
-	frontMatter, err := toml.Marshal(&struct {
-		Title   string             `toml:"title"`
-		Created toml.LocalDateTime `toml:"date"`
-		Updated toml.LocalDateTime `toml:"lastmod"`
-		Tags    []string           `toml:"tags"`
-	}{
-		Title:   article.Title,
-		Created: tomlLocalDateTime(article.Created),
-		Updated: tomlLocalDateTime(article.Updated),
-		Tags:    article.Tags,
-	})
+	fmMap := make(map[string]any)
+	fmMap["title"] = article.Title
+	fmMap["date"] = tomlLocalDateTime(article.Created)
+	fmMap["lastmod"] = tomlLocalDateTime(article.Updated)
+	fmMap["tags"] = article.Tags
+	attrs := service.FindAttrs(article.ID)
+	for k, v := range attrs {
+		if k == "date" || k == "lastmod" {
+			fmMap[k] = tomlLocalDateTime(v.(time.Time))
+		} else {
+			fmMap[k] = v
+		}
+	}
+	frontMatter, err := toml.Marshal(fmMap)
 	if err != nil {
 		logger.Fatalf("%+v", errors.Wrap(err, ""))
 	}
@@ -211,6 +221,20 @@ func exportArticle(article *service.Article) {
 	file.Write([]byte("+++\r\n\r\n"))
 
 	file.WriteString(article.Content)
+
+	links := service.FindLinkTo(article.ID)
+	if len(links) > 0 {
+		file.WriteString("\r\n\r\n---\r\n\r\n反链：\r\n\r\n")
+		for i, l := range links {
+			file.WriteString(strconv.Itoa(i + 1))
+			file.WriteString(". ")
+			file.WriteString("[")
+			file.WriteString(l[0])
+			file.WriteString("](")
+			file.WriteString(l[1])
+			file.WriteString(")\r\n")
+		}
+	}
 
 	// 输出资源文件
 	assertDirPath := filepath.Join(articleDirPath, "assets")
