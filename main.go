@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,7 +91,7 @@ func main() {
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		}
 	} else if config.GetConfig().SSH.KeyPath != "" {
-		key, err := ioutil.ReadFile(config.GetConfig().SSH.KeyPath)
+		key, err := os.ReadFile(config.GetConfig().SSH.KeyPath)
 		if err != nil {
 			logger.Fatalf("%+v", errors.WithStack(err))
 		}
@@ -156,11 +155,11 @@ func main() {
 }
 
 func packageSite() string {
-	tempDir, err := ioutil.TempDir("", "sitezip-*")
+	tempDir, err := os.MkdirTemp("", "sitezip-*")
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
 	}
-	tempFile, err := ioutil.TempFile(tempDir, "*.tar.gz")
+	tempFile, err := os.CreateTemp(tempDir, "*.tar.gz")
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
 	}
@@ -170,7 +169,7 @@ func packageSite() string {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 	publicPath := filepath.Join(config.GetConfig().Hugo.BlogPath, "public")
-	fis, err := ioutil.ReadDir(publicPath)
+	fis, err := os.ReadDir(publicPath)
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
 	}
