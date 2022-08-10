@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"container/list"
 	"net/url"
 	"strconv"
 	"strings"
@@ -23,12 +22,11 @@ type FormatRenderer struct {
 	*render.BaseRenderer
 	NodeWriterStack []*bytes.Buffer // 节点输出缓冲栈
 	article         *service.Article
-	articles        *list.List
-	publishMap      map[string]struct{}
+	articles        *service.ArticleList
 }
 
 // NewFormatRenderer 创建一个格式化渲染器。
-func NewFormatRenderer(tree *parse.Tree, options *render.Options, article *service.Article, articles *list.List, publishMap map[string]struct{}) *FormatRenderer {
+func NewFormatRenderer(tree *parse.Tree, options *render.Options, article *service.Article, articles *service.ArticleList) *FormatRenderer {
 	ret := &FormatRenderer{BaseRenderer: render.NewBaseRenderer(tree, options)}
 	ret.RendererFuncs[ast.NodeDocument] = ret.renderDocument
 	ret.RendererFuncs[ast.NodeParagraph] = ret.renderParagraph
@@ -165,7 +163,6 @@ func NewFormatRenderer(tree *parse.Tree, options *render.Options, article *servi
 	ret.RendererFuncs[ast.NodeTextMarkCloseMarker] = ret.renderTextMarkCloseMarker
 	ret.article = article
 	ret.articles = articles
-	ret.publishMap = publishMap
 	return ret
 }
 
@@ -1040,9 +1037,7 @@ func (r *FormatRenderer) renderLink(node *ast.Node, entering bool) ast.WalkStatu
 					if a != nil {
 						t := strings.ReplaceAll(a.Title, " ", "-")
 						link = "../" + url.QueryEscape(strings.ToLower(t)) + "/"
-						if _, ok := r.publishMap[a.ID]; !ok {
-							r.articles.PushBack(a)
-						}
+						r.articles.Put(a)
 					}
 				}
 				r.WriteString("(" + link)

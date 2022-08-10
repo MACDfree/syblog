@@ -16,22 +16,63 @@ import (
 var client = req.C()
 
 type Article struct {
-	Title   string    `toml:"title"`
-	Created time.Time `toml:"date"`
-	Updated time.Time `toml:"lastmod"`
-	Tags    []string  `toml:"tags"`
-	Content string    `toml:"-"`
-	Linked  []string  `toml:"-"`
-	Asserts []string  `toml:"-"`
-	ID      string    `toml:"-"`
+	Title   string
+	Created time.Time
+	Updated time.Time
+	Tags    []string
+	Content string
+	Linked  []string
+	Asserts []string
+	ID      string
 }
 
-func FindArticleList() *list.List {
+type ArticleList struct {
+	ls    *list.List
+	index map[string]*list.Element
+}
+
+func NewArticleList() *ArticleList {
+	return &ArticleList{
+		ls:    list.New(),
+		index: make(map[string]*list.Element),
+	}
+}
+
+func (al *ArticleList) Put(a *Article) {
+	if al.Exist(a.ID) {
+		return
+	}
+	e := al.ls.PushBack(a)
+	al.index[a.ID] = e
+}
+
+func (al *ArticleList) Get(id string) *Article {
+	e, ok := al.index[id]
+	if !ok {
+		return nil
+	}
+	return e.Value.(*Article)
+}
+
+func (al *ArticleList) Exist(id string) bool {
+	_, ok := al.index[id]
+	return ok
+}
+
+func (al *ArticleList) Front() *list.Element {
+	return al.ls.Front()
+}
+
+func (al *ArticleList) Len() int {
+	return al.ls.Len()
+}
+
+func FindArticleList() *ArticleList {
 	l, err := findList("select * from blocks where type='d' and id in (select block_id from attributes where name='custom-publish' and value='1')")
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
 	}
-	as := list.New()
+	as := NewArticleList()
 	for _, doc := range l {
 		article := &Article{}
 		article.ID = doc["id"].(string)
@@ -59,7 +100,7 @@ func FindArticleList() *list.List {
 			}
 			article.Tags = tags
 		}
-		as.PushBack(article)
+		as.Put(article)
 	}
 	return as
 }
@@ -138,7 +179,7 @@ func FindAttrs(id string) map[string]any {
 	return ret
 }
 
-func FindLinkTo(id string) [][2]string {
+func FindLinkTo(id string, articles *ArticleList) [][2]string {
 	ids, err := findList("select root_id from refs where def_block_root_id='" + id + "'")
 	if err != nil {
 		logger.Fatalf("%+v", errors.WithStack(err))
@@ -146,6 +187,9 @@ func FindLinkTo(id string) [][2]string {
 	ret := make([][2]string, 0)
 	for _, d := range ids {
 		aid := d["root_id"].(string)
+		if !articles.Exist(aid) {
+			continue
+		}
 		ls, err := findList("select content from blocks where id='" + aid + "'")
 		if err != nil {
 			logger.Errorf("%+v", errors.WithStack(err))

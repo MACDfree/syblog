@@ -26,8 +26,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var publishMap = make(map[string]struct{})
-
 func main() {
 	logger.Info("读取配置")
 	logger.Infof("思源笔记API地址：%s", config.GetConfig().SY.APIURL)
@@ -37,14 +35,10 @@ func main() {
 	os.RemoveAll(hugoContentPath)
 	logger.Info("获取需要发布的文章列表")
 	articles := service.FindArticleList()
-	logger.Infof("需要发布的文章数（直接）：%d", articles.Len())
-	logger.Info("开始逐个发布文章")
+	logger.Infof("需要发布的直接文章数：%d", articles.Len())
+	logger.Info("开始搜索关联文章")
 	for e := articles.Front(); e != nil; e = e.Next() {
 		article := e.Value.(*service.Article)
-		if _, ok := publishMap[article.ID]; ok {
-			continue
-		}
-		logger.Infof("开始发布：%s", article.Title)
 		md, err := service.ExportMD(article.ID)
 		if err != nil {
 			logger.Errorf("%+v", errors.WithStack(err))
@@ -54,15 +48,21 @@ func main() {
 		tree := parse.Parse("", []byte(md), luteEngine.ParseOptions)
 		luteEngine.RenderOptions.AutoSpace = true
 		luteEngine.RenderOptions.FixTermTypo = true
-		renderer := render.NewFormatRenderer(tree, luteEngine.RenderOptions, article, articles, publishMap)
+		renderer := render.NewFormatRenderer(tree, luteEngine.RenderOptions, article, articles)
 		formattedBytes := renderer.Render()
 		md = util.BytesToStr(formattedBytes)
 		article.Content = md
-		exportArticle(article)
-		publishMap[article.ID] = struct{}{}
+	}
+	logger.Infof("总共需要发布的文章数：%d", articles.Len())
+
+	logger.Info("开始发布文章")
+	for e := articles.Front(); e != nil; e = e.Next() {
+		article := e.Value.(*service.Article)
+		logger.Infof("开始发布：%s", article.Title)
+		exportArticle(article, articles)
 		logger.Infof("完成发布：%s", article.Title)
 	}
-	logger.Infof("总共发布的文章数：%d", articles.Len())
+	logger.Info("发布文章结束")
 
 	logger.Info("执行Hugo生成站点")
 	cmd := exec.Command(config.GetConfig().Hugo.ExcutePath)
@@ -187,7 +187,7 @@ func packageSite() string {
 	return tempFile.Name()
 }
 
-func exportArticle(article *service.Article) {
+func exportArticle(article *service.Article, articles *service.ArticleList) {
 	fmMap := make(map[string]any)
 	fmMap["title"] = article.Title
 	fmMap["date"] = tomlLocalDateTime(article.Created)
@@ -221,7 +221,7 @@ func exportArticle(article *service.Article) {
 
 	file.WriteString(article.Content)
 
-	links := service.FindLinkTo(article.ID)
+	links := service.FindLinkTo(article.ID, articles)
 	if len(links) > 0 {
 		file.WriteString("\r\n\r\n---\r\n\r\n反链：\r\n\r\n")
 		for i, l := range links {
