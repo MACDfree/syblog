@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"syblog/config"
 	"syblog/service"
 	"unicode"
 	"unicode/utf8"
@@ -1036,7 +1037,7 @@ func (r *FormatRenderer) renderLink(node *ast.Node, entering bool) ast.WalkStatu
 					a := service.FindArticleByBlockID(id)
 					if a != nil {
 						t := strings.ReplaceAll(a.Title, " ", "-")
-						link = "../" + url.QueryEscape(strings.ToLower(t)) + "/"
+						link = "/" + config.GetConfig().Hugo.SectionName + "/" + url.QueryEscape(strings.ToLower(t)) + "/"
 						r.articles.Put(a)
 					}
 				}

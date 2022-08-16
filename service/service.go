@@ -203,7 +203,7 @@ func FindLinkTo(id string, articles *ArticleList) [][2]string {
 		item := [2]string{}
 		item[0] = title
 		t := strings.ReplaceAll(title, " ", "-")
-		link := "../" + url.QueryEscape(strings.ToLower(t)) + "/"
+		link := "/" + config.GetConfig().Hugo.SectionName + "/" + url.QueryEscape(strings.ToLower(t)) + "/"
 		item[1] = link
 		ret = append(ret, item)
 	}
