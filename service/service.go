@@ -91,15 +91,7 @@ func FindArticleList() *ArticleList {
 			logger.Fatalf("%+v", errors.WithStack(err))
 		}
 		tagStr := doc["tag"].(string)
-		if tagStr == "" {
-			article.Tags = []string{}
-		} else {
-			tags := strings.Split(tagStr, " ")
-			for i := 0; i < len(tags); i++ {
-				tags[i] = strings.Trim(tags[i], "#")
-			}
-			article.Tags = tags
-		}
+		article.Tags = parseTag(tagStr)
 		as.Put(article)
 	}
 	return as
@@ -133,12 +125,25 @@ func FindArticleByBlockID(blockID string) *Article {
 		article.Updated = article.Created
 	}
 	tagStr := doc["tag"].(string)
-	tags := strings.Split(tagStr, " ")
-	for i := 0; i < len(tags); i++ {
-		tags[i] = strings.Trim(tags[i], "#")
-	}
-	article.Tags = tags
+	article.Tags = parseTag(tagStr)
 	return article
+}
+
+func parseTag(str string) []string {
+	if str == "" {
+		return []string{}
+	}
+	tags := strings.Split(str, "# #")
+	for i := 0; i < len(tags); i++ {
+		if i == 0 {
+			tags[i] = tags[i][1:]
+		}
+		if i == len(tags)-1 {
+			tags[i] = tags[i][:len(tags[i])-1]
+		}
+		tags[i] = strings.TrimSpace(tags[i])
+	}
+	return tags
 }
 
 func ExportMD(id string) (string, error) {
